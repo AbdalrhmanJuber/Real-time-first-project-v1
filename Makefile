@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g
-LDFLAGS = -lGL -lGLU -lglut   # For OpenGL graphics
+LDFLAGS = -lGL -lGLU -lglut   # hello from ali
 
 SRC = main.c player.c config.c fifo.c pipe.c graphics.c
 OBJ = $(SRC:.c=.o)
