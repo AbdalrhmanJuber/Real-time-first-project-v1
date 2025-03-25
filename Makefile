@@ -11,10 +11,10 @@ TARGET = rope_game
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-    $(CC) $(OBJ) -o $(TARGET) $(LDFLAGS)
+	$(CC) $(OBJ) -o $(TARGET) $(LDFLAGS) 
 
 %.o: %.c $(DEPS)
-    $(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@ 
 
 clean:
-    rm -f *.o $(TARGET)
+	rm -f *.o $(TARGET)
