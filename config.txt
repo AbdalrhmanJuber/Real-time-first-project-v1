@@ -1,7 +1,0 @@
-max_energy=100
-energy_decrease_min=1
-energy_decrease_max=5
-simulation_time=60
-winning_threshold=300
-fall_recovery_min=2
-fall_recovery_max=5
