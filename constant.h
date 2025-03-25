@@ -1,4 +1,3 @@
-
 #ifndef COMM_H
 #define COMM_H
 
@@ -20,7 +19,7 @@ typedef struct {
     int decay_rate;       // used for per-second energy drop
     int is_fallen;        // 0 or 1
     int location;         // 0..3
-    int fall_time_left;   // how many seconds left to recover
+    int fall_time_left;   // Time remaining until player recovers from fall
 } PlayerData;
 
 typedef struct {

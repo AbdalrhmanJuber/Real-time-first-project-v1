@@ -4,7 +4,7 @@
 #include <signal.h>
 #include <time.h>
 
-#include "comm.h"
+#include "constant.h"
 #include "pipe.h"
 #include "config.h"
 

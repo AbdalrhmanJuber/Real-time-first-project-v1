@@ -6,7 +6,7 @@
 #include <time.h>
 #include <sys/time.h>  // for gettimeofday
 
-#include "comm.h"
+#include "constant.h"
 #include "config.h"
 #include "pipe.h"
 

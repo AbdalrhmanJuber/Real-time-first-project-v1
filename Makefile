@@ -4,7 +4,7 @@ LDFLAGS = -lGL -lGLU -lglut   # hello from ali
 
 SRC = main.c player.c config.c fifo.c pipe.c graphics.c
 OBJ = $(SRC:.c=.o)
-DEPS = comm.h config.h fifo.h pipe.h
+DEPS = constant.h config.h fifo.h pipe.h
 
 TARGET = rope_game
 
