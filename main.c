@@ -128,7 +128,7 @@ void assign_locations() {
         LocationMessage lm2;
         lm2.player_id = t2[i].id;   // 0..3
         lm2.location  = i; 
-        int pipe_idx2 = t2[i].id + 4; // if T2 => child index is 4..7
+        int pipe_idx2 = t2[i].id; // if T2 => child index is 4..7
         write_effort(loc_pipes[pipe_idx2][1], &lm2, sizeof(lm2));
         kill(players[pipe_idx2], SIG_SET_LOC);
     }
@@ -154,7 +154,8 @@ int main(int argc, char *argv[])
 
     // spawn children
     spawn_players();
-
+    usleep(10000); // let them start
+    
     // Time tracking
     struct timeval start_time, current_time;
     gettimeofday(&start_time,NULL);
@@ -197,11 +198,9 @@ int main(int argc, char *argv[])
             }
             printf("[Round %d, sec %d] T1=%d, T2=%d\n", total_rounds, t+1, sum_t1, sum_t2);
 
-            if (sum_t1 >= cfg.win_threshold) {
-                round_winner=TEAM1; break;
-            }
-            if (sum_t2 >= cfg.win_threshold) {
-                round_winner=TEAM2; break;
+            if (sum_t1 >= cfg.win_threshold || sum_t2 >= cfg.win_threshold) {
+                round_winner = (sum_t1 > sum_t2) ? TEAM1 : TEAM2;
+                break;
             }
 
             gettimeofday(&current_time,NULL);

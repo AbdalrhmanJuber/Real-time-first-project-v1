@@ -4,4 +4,4 @@ fall_recover_range 1 2
 win_threshold 100  # Lower for quicker rounds
 max_game_time 30
 max_score 3
-consecutive_wins 2
+consecutive_wins 7

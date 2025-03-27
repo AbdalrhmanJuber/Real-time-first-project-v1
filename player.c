@@ -67,7 +67,7 @@ void do_one_second_of_play() {
         me.energy -= me.decay_rate;
         if (me.energy < 0) me.energy = 0;
         int r = rand() % 100;
-        if (r < 10) {
+        if (r < 5) {
             me.is_fallen = 1;
             me.energy = 0;
             int min_recover = 2;
