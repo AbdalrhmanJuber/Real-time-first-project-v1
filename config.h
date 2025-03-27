@@ -1,3 +1,4 @@
+// config.h
 #ifndef CONFIG_H
 #define CONFIG_H
 
@@ -12,7 +13,7 @@ typedef struct {
     int fall_recover_max;
 
     int win_threshold;
-    int max_game_time;      // in seconds
+    int max_game_time;
     int max_score;
     int consecutive_wins;
 } GameConfig;
