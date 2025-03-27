@@ -8,101 +8,114 @@
 #include "pipe.h"
 #include "config.h"
 
-static PlayerData me;   // Info about this player
-static int write_fd = -1;  // For sending EffortMessage to referee
+static PlayerData me;
+static int write_fd_effort = -1;  // Child->Parent for EffortMessage or EnergyReply
+static int read_fd_loc    = -1;  // Parent->Child location assignment
+
+// Called when the parent requests energy
+void on_energy_req(int sig) {
+    EnergyReply er;
+    er.player_id = me.id;
+    er.team      = me.team;
+    er.energy    = me.energy; // raw energy
+    write_effort(write_fd_effort, &er, sizeof(er));
+}
+
+// Called when we get SIG_SET_LOC
+void on_set_loc(int sig) {
+    // Read location from parent's location pipe
+    LocationMessage lm;
+    int bytes = read_effort(read_fd_loc, &lm, sizeof(lm));
+    if (bytes == sizeof(lm) && lm.player_id == me.id) {
+        me.location = lm.location;
+        printf("[Child %d, Team %d] Assigned location = %d\n", me.id, me.team, me.location);
+    }
+}
 
 // Called when we get SIG_READY
 void on_ready(int sig) {
-    // Naive approach: reorder location based on local energy,
-    // but we don't know teammates' energies, so let's just randomize location.
-    me.location = rand() % 4;
-    printf("[Player %d, Team %d] SIG_READY => location set to %d (energy=%d)\n",
+    // Now that location is assigned, just log
+    printf("[Player %d, Team %d] SIG_READY => location=%d, energy=%d\n",
            me.id, me.team, me.location, me.energy);
-
-    // If we had actual team comparison, we'd gather all players' energies, sort, etc.
 }
 
 // Called when we get SIG_PULL
 void on_pull(int sig) {
-    // Start pulling => might do nothing but let's just log
     printf("[Player %d, Team %d] SIG_PULL => Start pulling\n", me.id, me.team);
 }
 
 // Called when we get SIG_TERMINATE
 void on_terminate(int sig) {
     printf("[Player %d, Team %d] Terminating...\n", me.id, me.team);
+    fflush(stdout);
     exit(0);
 }
 
 // Each second, do pulling logic
-void do_one_second_of_play()
-{
-    // If we are fallen, decrement fall_time_left
+void do_one_second_of_play() {
+    // same falling/energy logic
     if (me.is_fallen) {
         me.fall_time_left--;
         if (me.fall_time_left <= 0) {
-            // Recovered
             me.is_fallen = 0;
-            // Let's assume we rejoin with random energy between 1..(current + 10)
-            // or you can set it to some fraction of old energy.
             int regained = (rand() % 10) + 1;
             me.energy += regained;
-            printf("[Player %d, Team %d] Recovered from fall! New energy=%d\n", me.id, me.team, me.energy);
+            printf("[Player %d, Team %d] Recovered from fall. energy=%d\n",
+                   me.id, me.team, me.energy);
         }
     } else {
-        // Decrement energy only if not fallen
         me.energy -= me.decay_rate;
         if (me.energy < 0) me.energy = 0;
-
-        // Random chance to fall: e.g. 10%
         int r = rand() % 100;
-        if (r < 10) { // 10% chance
+        if (r < 10) {
             me.is_fallen = 1;
             me.energy = 0;
-            // random recovery time in [fall_recover_min..fall_recover_max]
-            int min_recover = 2; // Hardcode or store from config
-            int max_recover = 5; // Hardcode or store from config
-            // For a more robust approach, you'd pass fall recover range to child 
-            // just like we pass energy/decay, but for brevity let's hardcode or guess
+            int min_recover = 2;
+            int max_recover = 5;
             me.fall_time_left = (rand() % (max_recover - min_recover + 1)) + min_recover;
-            printf("[Player %d, Team %d] Fell! Will recover in %d secs\n", me.id, me.team, me.fall_time_left);
+            printf("[Player %d, Team %d] Fell. Will recover in %d sec\n",
+                   me.id, me.team, me.fall_time_left);
         }
     }
 
-    // Weighted effort => energy * (1 + location)
-    int multiplier = 1 + me.location;
-    int weighted = me.is_fallen ? 0 : (me.energy * multiplier);
+    // Weighted effort
+    int mult = 1 + me.location;
+    int weighted = (me.is_fallen ? 0 : me.energy * mult);
 
-    // Send EffortMessage to parent
     EffortMessage msg;
-    msg.player_id = me.id;
-    msg.team = me.team;
-    msg.weighted_effort = weighted;
-
-    write_effort(write_fd, &msg, sizeof(msg));
+    msg.player_id      = me.id;
+    msg.team           = me.team;
+    msg.weighted_effort= weighted;
+    write_effort(write_fd_effort, &msg, sizeof(msg));
 }
 
 int main(int argc, char *argv[])
 {
     srand(time(NULL) ^ getpid());
 
-    // Expect arguments: [0]=binary, [1]=id, [2]=team, [3]=decay, [4]=init_energy, [5]=write_fd
-    me.id          = atoi(argv[1]);
-    me.team        = atoi(argv[2]);
-    me.decay_rate  = atoi(argv[3]);
-    me.energy      = atoi(argv[4]);
-    write_fd       = atoi(argv[5]);
+    // Expecting:
+    // argv[1]=player_id, argv[2]=team, argv[3]=decay, argv[4]=energy
+    // argv[5]=fd for EFFORT writing
+    // argv[6]=fd for LOCATION reading
+    me.id         = atoi(argv[1]);
+    me.team       = atoi(argv[2]);
+    me.decay_rate = atoi(argv[3]);
+    me.energy     = atoi(argv[4]);
+    write_fd_effort= atoi(argv[5]);
+    read_fd_loc   = atoi(argv[6]);
 
     me.is_fallen   = 0;
-    me.location    = me.id; 
+    me.location    = 0;
     me.fall_time_left = 0;
 
-    // Register signal handlers
-    signal(SIG_READY, on_ready);
-    signal(SIG_PULL, on_pull);
-    signal(SIG_TERMINATE, on_terminate);
+    // Register signals
+    signal(SIG_ENERGY_REQ, on_energy_req);
+    signal(SIG_SET_LOC,    on_set_loc);
+    signal(SIG_READY,      on_ready);
+    signal(SIG_PULL,       on_pull);
+    signal(SIG_TERMINATE,  on_terminate);
 
-    // Infinite loop: each second simulate
+    // main loop
     while (1) {
         sleep(1);
         do_one_second_of_play();
