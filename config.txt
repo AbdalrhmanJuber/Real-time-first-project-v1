@@ -1,7 +1,7 @@
 energy_range 80 100
-decay_range 1 2
+decay_range 30 40
 fall_recover_range 1 2
-win_threshold 100  # Lower for quicker rounds
-max_game_time 30
+win_threshold 100 
+max_game_time 20
 max_score 3
-consecutive_wins 7
+consecutive_wins 2

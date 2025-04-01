@@ -36,6 +36,7 @@ void spawn_players() {
 
         char buf_id[16], buf_team[16], buf_decay[16], buf_energy[16];
         char buf_write_effort[16], buf_read_loc[16];
+        char buf_decay_min[16], buf_decay_max[16], buf_recover_min[16], buf_recover_max[16];
 
         sprintf(buf_id, "%d", player_id);
         sprintf(buf_team, "%d", team_id);
@@ -45,6 +46,12 @@ void spawn_players() {
         sprintf(buf_write_effort, "%d", effort_pipes[i][1]);
         // parent->child => loc_pipes[i][0] (child reads)
         sprintf(buf_read_loc, "%d", loc_pipes[i][0]);
+        // decay_min/max and recover_min/max are passed to the child
+        sprintf(buf_decay_min, "%d", cfg.decay_min);
+        sprintf(buf_decay_max, "%d", cfg.decay_max);
+        sprintf(buf_recover_min, "%d", cfg.fall_recover_min);
+        sprintf(buf_recover_max, "%d", cfg.fall_recover_max);
+
 
         pid_t pid=fork();
         if (pid==0) {
@@ -56,6 +63,8 @@ void spawn_players() {
             execl("./player","./player",
                   buf_id, buf_team, buf_decay, buf_energy,
                   buf_write_effort, buf_read_loc,
+                    buf_decay_min, buf_decay_max,
+                    buf_recover_min, buf_recover_max,
                   (char*)NULL);
             perror("execl failed");
             exit(1);
@@ -75,6 +84,8 @@ void assign_locations() {
         kill(players[i], SIG_ENERGY_REQ);
     }
 
+    
+
     // 2) read 8 replies (EnergyReply)
     // We'll store them in arrays for Team1 & Team2
     typedef struct { int id; int energy; } SimplePlayer;
@@ -89,10 +100,14 @@ void assign_locations() {
             if (er.team == TEAM1) {
                 t1[c1].id     = er.player_id; // 0..3
                 t1[c1].energy = er.energy;
+                printf("T1: %d %d\n", t1[c1].id, t1[c1].energy);
+                fflush(stdout);
                 c1++;
             } else {
                 t2[c2].id     = er.player_id; // 0..3
                 t2[c2].energy = er.energy;
+                printf("T2: %d %d\n", t2[c2].id, t2[c2].energy);
+                fflush(stdout);
                 c2++;
             }
             replies++;
@@ -102,17 +117,17 @@ void assign_locations() {
     // 3) sort each
     for (int i=0; i<TEAM_SIZE-1; i++){
         for (int j=i+1; j<TEAM_SIZE; j++){
-            if (t1[i].energy > t1[j].energy){
+            if (t1[i].energy < t1[j].energy){
                 SimplePlayer tmp=t1[i]; t1[i]=t1[j]; t1[j]=tmp;
             }
-            if (t2[i].energy > t2[j].energy){
+            if (t2[i].energy < t2[j].energy){
                 SimplePlayer tmp=t2[i]; t2[i]=t2[j]; t2[j]=tmp;
             }
         }
     }
-
+    usleep(10000); // let them process the energy message
     // 4) assign location
-    // smallest energy => location=0, next =>1, etc.
+    // Bigger energy => location=0, next =>1, etc.
     // then send location to each child via loc_pipes
     for (int i=0; i<TEAM_SIZE; i++){
         // For Team1
@@ -128,7 +143,7 @@ void assign_locations() {
         LocationMessage lm2;
         lm2.player_id = t2[i].id;   // 0..3
         lm2.location  = i; 
-        int pipe_idx2 = t2[i].id; // if T2 => child index is 4..7
+        int pipe_idx2 = t2[i].id + TEAM_SIZE;// if T2 => child index is 4..7
         write_effort(loc_pipes[pipe_idx2][1], &lm2, sizeof(lm2));
         kill(players[pipe_idx2], SIG_SET_LOC);
     }
@@ -160,32 +175,44 @@ int main(int argc, char *argv[])
     struct timeval start_time, current_time;
     gettimeofday(&start_time,NULL);
 
+    // *** 1) parent-based location assignment before SIG_READY
+    printf("=== Assigning locations ===\n");
+    fflush(stdout);
+    assign_locations();
+    usleep(10000); // let them start
+    printf("=== Locations assigned ===\n");
+    fflush(stdout);
+
+    usleep(100000); // let them process the location message
+
     int total_rounds=0;
     int last_winner=-1;
     while (1) {
         total_rounds++;
         printf("\n===== START ROUND %d =====\n", total_rounds);
 
-        // *** 1) parent-based location assignment before SIG_READY
-        assign_locations();
-
         // *** 2) now that children have location, we can signal them "ready"
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_READY);
         }
-        sleep(1); // let them reorder (they already have location though)
-
+        usleep(10000); // let them process the ready message
+        printf("=== Players are ready ===\n");
         // *** 3) send SIG_PULL
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_PULL);
         }
+        usleep(10000); // let them process the pull message
 
-        // *** 4) same as your existing round logic
+        printf("=== Players are pulling ===\n");
+        fflush(stdout);
+
+        // *** 4) read from each child's pipe and compute the sum of efforts
+        // *** 5) check for winner
         int round_winner = -1;
-        int round_duration = 10;
-        for (int t=0; t<round_duration; t++){
+        //int round_duration = 10; // IF you want to test with a fixed duration
+        for (int t=0; ; t++){
             sleep(1);
-
+            
             int sum_t1=0, sum_t2=0;
             EffortMessage em;
             // read from each child's pipe

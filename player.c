@@ -9,9 +9,12 @@
 #include "config.h"
 
 static PlayerData me;
-static int write_fd_effort = -1;  // Child->Parent for EffortMessage or EnergyReply
-static int read_fd_loc    = -1;  // Parent->Child location assignment
-
+static int write_fd_effort = -1;  // Player->Parent for EffortMessage or EnergyReply
+static int read_fd_loc    = -1;  // Parent->Player location assignment
+static int decay_min = 1;
+static int decay_max = 2;
+static int recover_min = 1;
+static int recover_max = 2;
 // Called when the parent requests energy
 void on_energy_req(int sig) {
     EnergyReply er;
@@ -28,7 +31,7 @@ void on_set_loc(int sig) {
     int bytes = read_effort(read_fd_loc, &lm, sizeof(lm));
     if (bytes == sizeof(lm) && lm.player_id == me.id) {
         me.location = lm.location;
-        printf("[Child %d, Team %d] Assigned location = %d\n", me.id, me.team, me.location);
+        printf("[Player %d, Team %d] Assigned location = %d\n", me.id, me.team, me.location);
     }
 }
 
@@ -51,9 +54,7 @@ void on_terminate(int sig) {
     exit(0);
 }
 
-// Each second, do pulling logic
 void do_one_second_of_play() {
-    // same falling/energy logic
     if (me.is_fallen) {
         me.fall_time_left--;
         if (me.fall_time_left <= 0) {
@@ -64,15 +65,19 @@ void do_one_second_of_play() {
                    me.id, me.team, me.energy);
         }
     } else {
-        me.energy -= me.decay_rate;
-        if (me.energy < 0) me.energy = 0;
-        int r = rand() % 100;
-        if (r < 5) {
-            me.is_fallen = 1;
+        // Dynamic decay based on config ranges
+        int random_decay = (rand() % (decay_max - decay_min + 1)) + decay_min;
+        me.energy -= random_decay;
+        
+        if (me.energy <= 0) {
+            // Player falls when energy reaches 0
             me.energy = 0;
-            int min_recover = 2;
-            int max_recover = 5;
-            me.fall_time_left = (rand() % (max_recover - min_recover + 1)) + min_recover;
+            me.is_fallen = 1;
+            
+            // Dynamic recovery time based on config ranges
+            int random_recover = (rand() % (recover_max - recover_min + 1)) + recover_min;
+            me.fall_time_left = random_recover;
+            
             printf("[Player %d, Team %d] Fell. Will recover in %d sec\n",
                    me.id, me.team, me.fall_time_left);
         }
@@ -88,21 +93,21 @@ void do_one_second_of_play() {
     msg.weighted_effort= weighted;
     write_effort(write_fd_effort, &msg, sizeof(msg));
 }
-
 int main(int argc, char *argv[])
 {
     srand(time(NULL) ^ getpid());
 
-    // Expecting:
-    // argv[1]=player_id, argv[2]=team, argv[3]=decay, argv[4]=energy
-    // argv[5]=fd for EFFORT writing
-    // argv[6]=fd for LOCATION reading
     me.id         = atoi(argv[1]);
     me.team       = atoi(argv[2]);
     me.decay_rate = atoi(argv[3]);
     me.energy     = atoi(argv[4]);
     write_fd_effort= atoi(argv[5]);
     read_fd_loc   = atoi(argv[6]);
+
+    if (argc > 7) decay_min = atoi(argv[7]);
+    if (argc > 8) decay_max = atoi(argv[8]);
+    if (argc > 9) recover_min = atoi(argv[9]); 
+    if (argc > 10) recover_max = atoi(argv[10]);
 
     me.is_fallen   = 0;
     me.location    = 0;
