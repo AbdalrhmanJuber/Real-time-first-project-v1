@@ -42,10 +42,6 @@ void on_ready(int sig) {
            me.id, me.team, me.location, me.energy);
 }
 
-// Called when we get SIG_PULL
-void on_pull(int sig) {
-    printf("[Player %d, Team %d] SIG_PULL => Start pulling\n", me.id, me.team);
-}
 
 // Called when we get SIG_TERMINATE
 void on_terminate(int sig) {
@@ -59,7 +55,7 @@ void do_one_second_of_play() {
         me.fall_time_left--;
         if (me.fall_time_left <= 0) {
             me.is_fallen = 0;
-            int regained = (rand() % 10) + 1;
+            int regained = (rand() % 50) + 50;
             me.energy += regained;
             printf("[Player %d, Team %d] Recovered from fall. energy=%d\n",
                    me.id, me.team, me.energy);
@@ -68,8 +64,9 @@ void do_one_second_of_play() {
         // Dynamic decay based on config ranges
         int random_decay = (rand() % (decay_max - decay_min + 1)) + decay_min;
         me.energy -= random_decay;
+        int r = rand() % 100;
         
-        if (me.energy <= 0) {
+        if (me.energy <= 0 || r < 10 ) {
             // Player falls when energy reaches 0
             me.energy = 0;
             me.is_fallen = 1;
@@ -93,6 +90,18 @@ void do_one_second_of_play() {
     msg.weighted_effort= weighted;
     write_effort(write_fd_effort, &msg, sizeof(msg));
 }
+
+// Called when we get SIG_PULL
+void on_pull(int sig) {
+    printf("[Player %d, Team %d] SIG_PULL => Start pulling\n", me.id, me.team);
+    // main loop
+    while (1) {
+        sleep(1);
+        do_one_second_of_play();
+    }
+}
+
+
 int main(int argc, char *argv[])
 {
     srand(time(NULL) ^ getpid());
@@ -120,10 +129,11 @@ int main(int argc, char *argv[])
     signal(SIG_PULL,       on_pull);
     signal(SIG_TERMINATE,  on_terminate);
 
-    // main loop
-    while (1) {
-        sleep(1);
-        do_one_second_of_play();
+
+    while(1){
+        pause();
     }
+
+
     return 0;
 }

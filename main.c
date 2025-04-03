@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_READY);
         }
-        usleep(10000); // let them process the ready message
+        usleep(2000000); // let them process the ready message
         printf("=== Players are ready ===\n");
         // *** 3) send SIG_PULL
         for (int i=0; i<MAX_PLAYERS; i++){
@@ -209,11 +209,13 @@ int main(int argc, char *argv[])
         // *** 4) read from each child's pipe and compute the sum of efforts
         // *** 5) check for winner
         int round_winner = -1;
+        int sum_t1=0, sum_t2=0;
+
         //int round_duration = 10; // IF you want to test with a fixed duration
         for (int t=0; ; t++){
             sleep(1);
             
-            int sum_t1=0, sum_t2=0;
+            
             EffortMessage em;
             // read from each child's pipe
             for (int i=0; i<MAX_PLAYERS; i++){
