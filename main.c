@@ -83,9 +83,6 @@ void assign_locations() {
     for (int i=0; i<MAX_PLAYERS; i++){
         kill(players[i], SIG_ENERGY_REQ);
     }
-
-    
-
     // 2) read 8 replies (EnergyReply)
     // We'll store them in arrays for Team1 & Team2
     typedef struct { int id; int energy; } SimplePlayer;
