@@ -258,6 +258,15 @@ int main(int argc, char *argv[])
 
         printf("=== Winner of round %d is Team %d ===\n", total_rounds, round_winner);
 
+        // Stop all players from pulling
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            kill(players[i], SIG_STOP);
+            printf("roro %d",i);
+                }
+                
+        // Add a delay to ensure players exit the pulling loop
+        usleep(100000); // 100ms delay
+        
         // scoring logic
         team_scores[round_winner]++;
         if (round_winner==last_winner) {
