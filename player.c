@@ -15,6 +15,10 @@ static int decay_min = 1;
 static int decay_max = 2;
 static int recover_min = 1;
 static int recover_max = 2;
+static volatile sig_atomic_t pulling = 0;
+GameConfig cfg;  
+
+void on_stop(int sig);
 // Called when the parent requests energy
 void on_energy_req(int sig) {
     EnergyReply er;
@@ -66,7 +70,7 @@ void do_one_second_of_play() {
         me.energy -= random_decay;
         int r = rand() % 100;
         
-        if (me.energy <= 0 || r < 10 ) {
+        if (me.energy <= 0  ) {
             // Player falls when energy reaches 0
             me.energy = 0;
             me.is_fallen = 1;
@@ -93,13 +97,24 @@ void do_one_second_of_play() {
 
 // Called when we get SIG_PULL
 void on_pull(int sig) {
+    
     printf("[Player %d, Team %d] SIG_PULL => Start pulling\n", me.id, me.team);
+    me.energy = rand() % (cfg.energy_max - cfg.energy_min + 1) + cfg.energy_min;
+
     // main loop
+    pulling = 1;
     while (1) {
         sleep(1);
         do_one_second_of_play();
     }
 }
+
+// Add SIG_STOP handler
+void on_stop(int sig) {
+    pulling = 0;
+    printf("[Player %d, Team %d] Stopped pulling\n", me.id, me.team); // Optional debug
+}
+
 
 
 int main(int argc, char *argv[])
@@ -128,7 +143,8 @@ int main(int argc, char *argv[])
     signal(SIG_READY,      on_ready);
     signal(SIG_PULL,       on_pull);
     signal(SIG_TERMINATE,  on_terminate);
-
+// In main function, register the SIG_STOP handler
+    signal(SIG_STOP, on_stop);
 
     while(1){
         pause();
