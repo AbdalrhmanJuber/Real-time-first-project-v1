@@ -175,19 +175,22 @@ int main(int argc, char *argv[])
     struct timeval start_time, current_time;
     gettimeofday(&start_time,NULL);
 
-    // *** 1) parent-based location assignment before SIG_READY
-    printf("=== Assigning locations ===\n");
-    fflush(stdout);
-    assign_locations();
-    usleep(10000); // let them start
-    printf("=== Locations assigned ===\n");
-    fflush(stdout);
 
-    usleep(100000); // let them process the location message
 
     int total_rounds=0;
     int last_winner=-1;
     while (1) {
+
+                // *** 1) parent-based location assignment before SIG_READY
+        printf("=== Assigning locations ===\n");
+        fflush(stdout);
+        assign_locations();
+        usleep(10000); // let them start
+        printf("=== Locations assigned ===\n");
+        fflush(stdout);
+
+        usleep(100000); // let them process the location message
+
         total_rounds++;
         printf("\n===== START ROUND %d =====\n", total_rounds);
 
