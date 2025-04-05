@@ -5,13 +5,14 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <sys/time.h>
+#include <string.h>
 
 #include "constant.h"
 #include "config.h"
 #include "pipe.h"
 
-
-pid_t graphics_pid = -1;          // graphics child PID
+static int graphics_pipe[2]; // parent->graphics pipe
+pid_t graphics_pid = -1;     // graphics child PID
 
 int effort_pipes[MAX_PLAYERS][2]; // child->parent
 int loc_pipes[MAX_PLAYERS][2];    // parent->child
@@ -23,35 +24,34 @@ GameConfig cfg;                   // config
 int team_scores[2] = {0,0};
 int consecutive_wins[2] = {0,0};
 
-
-
+// Modified to use pipe communication
 void fork_graphics_process() {
-
-    graphics_pid = fork();
-
-    if (graphics_pid == 0) {
-
-        execl("./graphics", "./graphics", NULL);
-
-        perror("execl graphics failed");
-
+    if (pipe(graphics_pipe) == -1) {
+        perror("graphics_pipe creation failed");
         exit(1);
-
-    } else if (graphics_pid > 0) {
-
-        printf("[PARENT] Spawned graphics process with PID %d\n", graphics_pid);
-
-    } else {
-
-        perror("fork failed for graphics process");
-
-        exit(1);
-
     }
-
+    
+    graphics_pid = fork();
+    
+    if (graphics_pid == 0) {
+        // Child: graphics process
+        close(graphics_pipe[1]); // Close write end, child only reads
+        
+        // Convert pipe read fd to string to pass as argument
+        char read_fd_str[16];
+        sprintf(read_fd_str, "%d", graphics_pipe[0]);
+        
+        execl("./graphics", "./graphics", read_fd_str, (char*)NULL);
+        perror("execl graphics failed");
+        exit(1);
+    } else if (graphics_pid > 0) {
+        printf("[PARENT] Spawned graphics process with PID %d\n", graphics_pid);
+        close(graphics_pipe[0]); // Close read end, parent only writes
+    } else {
+        perror("fork failed for graphics process");
+        exit(1);
+    }
 }
-
-
 
 // spawn each child, passing 6 arguments
 void spawn_players() {
@@ -220,7 +220,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-     fork_graphics_process(); 
+    fork_graphics_process(); // Now uses pipe communication
+    
     // spawn children
     spawn_players();
     usleep(10000); // let them 
@@ -243,19 +244,19 @@ int main(int argc, char *argv[])
     while (1) {
         total_rounds++;
         printf("\n===== START ROUND %d =====\n", total_rounds);
-        kill(graphics_pid, SIGUSR1); // ** //
-
-
+        
         reset_players_energy();
         assign_locations();
         
         usleep(100000); // Let players process reset
+        
         // *** 2) now that children have location, we can signal them "ready"
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_READY);
         }
         usleep(2000000); // let them process the ready message
         printf("=== Players are ready ===\n");
+        
         // *** 3) send SIG_PULL
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_PULL);
@@ -264,20 +265,63 @@ int main(int argc, char *argv[])
 
         printf("=== Players are pulling ===\n");     
         fflush(stdout);
-
-        kill(graphics_pid, SIGUSR2); // *** //
+        
         // *** 4) read from each child's pipe and compute the sum of efforts
         // *** 5) check for winner
         int round_winner = -1;
         int sum_t1=0, sum_t2=0;
 
+        // Gather energy information for display
+        typedef struct { int id; int energy; } SimplePlayer;
+        SimplePlayer t1[TEAM_SIZE], t2[TEAM_SIZE];
+        int c1=0, c2=0;
+        
+        // Initialize message to graphics
+        GraphicsMessage graphics_msg;
+        memset(&graphics_msg, 0, sizeof(graphics_msg));
+        graphics_msg.roundNumber = total_rounds;
+        graphics_msg.roundWinner = 0; // No winner yet
+
+        // Send initial round information to graphics
+        write(graphics_pipe[1], &graphics_msg, sizeof(graphics_msg));
+
         //int round_duration = 10; // IF you want to test with a fixed duration
         for (int t=0; ; t++){
             sleep(1);
             
+            // Reset sums for this time step
+            sum_t1 = 0;
+            sum_t2 = 0;
             
+            // Request energy from all players first
+            for (int i=0; i<MAX_PLAYERS; i++){
+                kill(players[i], SIG_ENERGY_REQ);
+            }
+            
+            // Short delay to allow players to respond
+            usleep(10000);
+            
+            // Collect energy data for display
+            c1 = 0;
+            c2 = 0;
+            for (int i=0; i<MAX_PLAYERS; i++){
+                EnergyReply er;
+                int got = read_effort(effort_pipes[i][0], &er, sizeof(er));
+                if (got == sizeof(er)) {
+                    if (er.team == TEAM1) {
+                        t1[c1].id = er.player_id;
+                        t1[c1].energy = er.energy;
+                        c1++;
+                    } else {
+                        t2[c2].id = er.player_id;
+                        t2[c2].energy = er.energy;
+                        c2++;
+                    }
+                }
+            }
+            
+            // Read effort messages
             EffortMessage em;
-            // read from each child's pipe
             for (int i=0; i<MAX_PLAYERS; i++){
                 int n= read_effort(effort_pipes[i][0], &em, sizeof(em));
                 if (n==sizeof(em)){
@@ -285,7 +329,24 @@ int main(int argc, char *argv[])
                     else sum_t2 += em.weighted_effort;
                 }
             }
+            
             printf("[Round %d, sec %d] T1=%d, T2=%d\n", total_rounds, t+1, sum_t1, sum_t2);
+
+            // Update the graphics state
+            for (int i=0; i<TEAM_SIZE; i++) {
+                if (i < c1) {
+                    graphics_msg.team1Energies[t1[i].id] = t1[i].energy;
+                }
+                if (i < c2) {
+                    graphics_msg.team2Energies[t2[i].id] = t2[i].energy;
+                }
+            }
+            
+            graphics_msg.team1EffortSum = sum_t1;
+            graphics_msg.team2EffortSum = sum_t2;
+            
+            // Send real-time updates to graphics
+            write(graphics_pipe[1], &graphics_msg, sizeof(graphics_msg));
 
             if (sum_t1 >= cfg.win_threshold || sum_t2 >= cfg.win_threshold) {
                 round_winner = (sum_t1 > sum_t2) ? TEAM1 : TEAM2;
@@ -300,6 +361,7 @@ int main(int argc, char *argv[])
                 break;
             }
         }
+        
         // tie-break
         if (round_winner<0){
             int sum_t1=0, sum_t2=0;
@@ -316,12 +378,16 @@ int main(int argc, char *argv[])
             else round_winner = (rand()%2);
         }
 
-        printf("=== Winner of round %d is Team %d ===\n", total_rounds, round_winner);
+        printf("=== Winner of round %d is Team %d ===\n", total_rounds, round_winner + 1);
+
+        // Update and send final round winner info
+        graphics_msg.roundWinner = round_winner + 1; // Convert to 1-based for display
+        write(graphics_pipe[1], &graphics_msg, sizeof(graphics_msg));
 
         // Stop all players from pulling
         for (int i = 0; i < MAX_PLAYERS; i++) {
             kill(players[i], SIG_STOP);
-                }
+        }
                 
         // Add a delay to ensure players exit the pulling loop
         usleep(100000); // 100ms delay
@@ -337,13 +403,16 @@ int main(int argc, char *argv[])
         }
         last_winner= round_winner;
 
+        // Give time to view the results before next round
+        sleep(2);
+
         // end conditions
         if (team_scores[TEAM1]>= cfg.max_score || team_scores[TEAM2]>= cfg.max_score) {
-            printf("Team %d reached max_score => end game.\n", round_winner);
+            printf("Team %d reached max_score => end game.\n", round_winner+1);
             break;
         }
         if (consecutive_wins[round_winner]>= cfg.consecutive_wins){
-            printf("Team %d got %d consecutive => end\n", round_winner, consecutive_wins[round_winner]);
+            printf("Team %d got %d consecutive => end\n", round_winner+1, consecutive_wins[round_winner]);
             break;
         }
         gettimeofday(&current_time,NULL);
@@ -354,13 +423,17 @@ int main(int argc, char *argv[])
         }
     }
 
-    // terminate
+    // Close the pipe to signal end of data
+    close(graphics_pipe[1]);
+    
+    // terminate players
     for (int i=0; i<MAX_PLAYERS; i++){
         kill(players[i], SIG_TERMINATE);
     }
     for (int i=0; i<MAX_PLAYERS; i++){
         wait(NULL);
     }
+    
     printf("\n==== Final Score ====\n");
     printf("Team1=%d, Team2=%d\n",team_scores[TEAM1], team_scores[TEAM2]);
     printf("Bye!\n");

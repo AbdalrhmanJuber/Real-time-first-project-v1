@@ -48,4 +48,14 @@ typedef struct {
     int location;
 } LocationMessage;
 
+// Parent -> Graphics: real-time game state updates
+typedef struct {
+    int roundNumber;
+    int team1Energies[TEAM_SIZE];
+    int team2Energies[TEAM_SIZE];
+    int team1EffortSum;
+    int team2EffortSum;
+    int roundWinner; // 0 => none, 1 => Team1, 2 => Team2
+} GraphicsMessage;
+
 #endif

@@ -4,61 +4,33 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
-#include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
 
-float team1[4] = {80, 70, 60, 50};
-float team2[4] = {60, 55, 40, 35};
-char winner[10] = "T1";
+#include "constant.h"
 
-float currentOffset = 0.0;
-float targetOffset = 0.0;
+// Store each team's energy values
+static float team1[TEAM_SIZE] = {80, 70, 60, 50};
+static float team2[TEAM_SIZE] = {60, 55, 40, 35};
 
-int gameTime = 30;
-int remainingTime = 30;
-int timeUp = 0;
+// Game state tracking
+static int round_number = 0;
+static int sum_t1 = 0;
+static int sum_t2 = 0;
+static int round_winner = 0; // 0=none, 1=team1, 2=team2
 
-volatile sig_atomic_t sigusr1_received = 0;
-volatile sig_atomic_t sigusr2_received = 0;
-int freeze_data = 0;
-char status_message[50] = "";
+// Visualization variables
+static float currentOffset = 0.0;
+static float targetOffset = 0.0;
+static char status_message[50] = "";
+
+// Pipe from parent
+static int pipe_fd = -1;
 
 int compareDesc(const void* a, const void* b) {
     float fa = *(const float*)a;
     float fb = *(const float*)b;
     return (fa < fb) - (fa > fb);
-}
-
-void readConfig() {
-    FILE* file = fopen("config.txt", "r");
-    if (file == NULL) return;
-    char key[50];
-    while (fscanf(file, "%s", key) != EOF) {
-        if (strcmp(key, "max_game_time") == 0) {
-            fscanf(file, "%d", &gameTime);
-            remainingTime = gameTime;
-        } else {
-            fscanf(file, "%*s");
-        }
-    }
-    fclose(file);
-}
-
-void readDataFromFile() {
-    FILE* file = fopen("visual.txt", "r");
-    if (file == NULL) return;
-
-    fscanf(file, "T1: %f %f %f %f\n", &team1[0], &team1[1], &team1[2], &team1[3]);
-    fscanf(file, "T2: %f %f %f %f\n", &team2[0], &team2[1], &team2[2], &team2[3]);
-    fscanf(file, "WINNER: %s\n", winner);
-    fclose(file);
-
-    qsort(team1, 4, sizeof(float), compareDesc);
-    qsort(team2, 4, sizeof(float), compareDesc);
-
-    float sum1 = team1[0] + team1[1] + team1[2] + team1[3];
-    float sum2 = team2[0] + team2[1] + team2[2] + team2[3];
-
-    targetOffset = (sum2 - sum1) / 400.0;
 }
 
 void drawEnergy(float x, float y, float energy) {
@@ -113,6 +85,7 @@ void drawText(float x, float y, const char *text) {
 void display() {
     glClear(GL_COLOR_BUFFER_BIT);
 
+    // Draw rope
     glColor3f(0.4, 0.2, 0.0);
     glBegin(GL_QUADS);
         glVertex2f(-0.9 + currentOffset, 0.0 - 0.01);
@@ -121,108 +94,114 @@ void display() {
         glVertex2f(-0.9 + currentOffset, 0.0 + 0.01);
     glEnd();
 
-    float sorted1[4], sorted2[4];
+    // Sort energies for display
+    float sorted1[TEAM_SIZE], sorted2[TEAM_SIZE];
     memcpy(sorted1, team1, sizeof(team1));
     memcpy(sorted2, team2, sizeof(team2));
-    qsort(sorted1, 4, sizeof(float), compareDesc);
-    qsort(sorted2, 4, sizeof(float), compareDesc);
+    qsort(sorted1, TEAM_SIZE, sizeof(float), compareDesc);
+    qsort(sorted2, TEAM_SIZE, sizeof(float), compareDesc);
 
-    for (int i = 0; i < 4; i++) {
+    // Draw team 1 players (blue)
+    for (int i = 0; i < TEAM_SIZE; i++) {
         float x = -0.7 + i * 0.15 + currentOffset;
-        drawPlayer(x, 0.05, 1, 0.0, 0.0, 1.0, sorted1[i]);
+        drawPlayer(x, 0.05, 1, 0.0, 0.0, 1.0, team1[i]);
     }
 
-    for (int i = 0; i < 4; i++) {
+    // Draw team 2 players (red)
+    for (int i = 0; i < TEAM_SIZE; i++) {
         float x = 0.7 - i * 0.15 + currentOffset;
-        drawPlayer(x, 0.05, -1, 1.0, 0.0, 0.0, sorted2[i]);
+        drawPlayer(x, 0.05, -1, 1.0, 0.0, 0.0, team2[i]);
     }
 
-    if (status_message[0] != '\0') {
-        drawText(-0.1, 0.85, status_message);
-    } else {
-        char msg[50];
-        snprintf(msg, sizeof(msg), "Winner: %s", winner);
-        drawText(-0.1, 0.85, msg);
-    }
+    // Draw round info
+    char roundStr[50];
+    snprintf(roundStr, sizeof(roundStr), "Round %d", round_number);
+    drawText(-0.9, 0.9, roundStr);
 
-    char timeStr[50];
-    if (!timeUp)
-        snprintf(timeStr, sizeof(timeStr), "Time Left: %d sec", remainingTime);
-    else
-        snprintf(timeStr, sizeof(timeStr), "Time is up!");
-    drawText(-0.9, 0.9, timeStr);
-
-    float sum1 = team1[0] + team1[1] + team1[2] + team1[3];
-    float sum2 = team2[0] + team2[1] + team2[2] + team2[3];
+    // Draw effort sums
     char effortStr[100];
-    snprintf(effortStr, sizeof(effortStr), "T1 Total: %.0f     T2 Total: %.0f", sum1, sum2);
+    snprintf(effortStr, sizeof(effortStr), "Team 1: %d | Team 2: %d", sum_t1, sum_t2);
     drawText(-0.25, 0.8, effortStr);
+
+    // Draw round winner if there is one
+    if (round_winner == 1) {
+        drawText(0.5, 0.9, "Team 1 Wins!");
+    } else if (round_winner == 2) {
+        drawText(0.5, 0.9, "Team 2 Wins!");
+    }
+    
+    // Draw status message if any
+    if (status_message[0] != '\0') {
+        drawText(-0.1, 0.7, status_message);
+    }
 
     glutSwapBuffers();
 }
 
-void timer(int value) {
-    if (!timeUp) {
-        if (!freeze_data) {
-            readDataFromFile();
-        }
-        remainingTime--;
-        if (remainingTime <= 0) {
-            timeUp = 1;
-        }
-    }
-    glutTimerFunc(1000, timer, 0);
-}
-
 void update(int value) {
-    if (sigusr1_received) {
-        printf("Graphics Recieved SIGUSR1\n\n");
-        for (int i = 0; i < 4; i++) {
-            team1[i] = 0.0f;
-            team2[i] = 0.0f;
+    // Check for new data from pipe
+    GraphicsMessage msg;
+    
+    // Non-blocking read from pipe
+    fd_set readfds;
+    struct timeval tv;
+    FD_ZERO(&readfds);
+    FD_SET(pipe_fd, &readfds);
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    
+    while (select(pipe_fd + 1, &readfds, NULL, NULL, &tv) > 0) {
+        if (read(pipe_fd, &msg, sizeof(msg)) == sizeof(msg)) {
+            // Update our local state with received data
+            round_number = msg.roundNumber;
+            
+            for (int i = 0; i < TEAM_SIZE; i++) {
+                team1[i] = msg.team1Energies[i];
+                team2[i] = msg.team2Energies[i];
+            }
+            
+            sum_t1 = msg.team1EffortSum;
+            sum_t2 = msg.team2EffortSum;
+            round_winner = msg.roundWinner;
+            
+            // Update target offset based on current sums
+            if (sum_t1 != 0 || sum_t2 != 0) {
+                targetOffset = (sum_t2 - sum_t1) / (float)(sum_t1 + sum_t2) * 0.3;
+            }
+            
+            if (round_winner == 1) {
+                snprintf(status_message, sizeof(status_message), "Team 1 Wins Round %d!", round_number);
+            } else if (round_winner == 2) {
+                snprintf(status_message, sizeof(status_message), "Team 2 Wins Round %d!", round_number);
+            } else {
+                snprintf(status_message, sizeof(status_message), "Round %d in progress", round_number);
+            }
+        } else {
+            // EOF or error
+            break;
         }
-        strncpy(status_message, "starting a round", sizeof(status_message));
-        freeze_data = 1;
-        sigusr1_received = 0;
-    }
-    if (sigusr2_received) {
-        printf("Graphics Recieved SIGUSR2\n\n");
-        freeze_data = 0;
-        readDataFromFile();
-        strncpy(status_message, "Pulling the rope", sizeof(status_message));
-        sigusr2_received = 0;
+        
+        // Check if there's more data
+        FD_ZERO(&readfds);
+        FD_SET(pipe_fd, &readfds);
     }
 
+    // Animate rope position
     float speed = 0.002;
-    if (!timeUp && fabs(currentOffset - targetOffset) > speed) {
+    if (fabs(currentOffset - targetOffset) > speed) {
         currentOffset += (currentOffset < targetOffset) ? speed : -speed;
+    } else {
+        currentOffset = targetOffset; // Snap to target when close
     }
+
     glutPostRedisplay();
     glutTimerFunc(16, update, 0);
 }
 
 void keyboard(unsigned char key, int x, int y) {
-    if (key == 'r' || key == 'R') {
-        if (freeze_data) return;
-        remainingTime = gameTime;
-        timeUp = 0;
-        currentOffset = 0.0;
-        readDataFromFile();
+    if (key == 'q' || key == 'Q' || key == 27) { // 27 is ESC key
+        exit(0);
     }
-}
-
-void handle_sigusr1(int sig) {
-    sigusr1_received = 1;
-}
-
-void handle_sigusr2(int sig) {
-    sigusr2_received = 1;
-}
-
-void init() {
-    glClearColor(1.0, 1.0, 1.0, 1.0);
-    signal(SIGUSR1, handle_sigusr1);
-    signal(SIGUSR2, handle_sigusr2);
 }
 
 int main(int argc, char** argv) {
@@ -231,13 +210,23 @@ int main(int argc, char** argv) {
     glutInitWindowSize(800, 600);
     glutCreateWindow("Rope Pulling Game Visualization");
 
-    init();
-    readConfig();
-    readDataFromFile();
+    // Get pipe fd from command line
+    if (argc > 1) {
+        pipe_fd = atoi(argv[1]);
+        printf("Graphics: Received pipe fd %d\n", pipe_fd);
+        
+        // Optional: set non-blocking mode
+        int flags = fcntl(pipe_fd, F_GETFL, 0);
+        fcntl(pipe_fd, F_SETFL, flags | O_NONBLOCK);
+    } else {
+        fprintf(stderr, "No pipe fd provided\n");
+        return 1;
+    }
+
+    glClearColor(1.0, 1.0, 1.0, 1.0);
 
     glutDisplayFunc(display);
     glutKeyboardFunc(keyboard);
-    glutTimerFunc(1000, timer, 0);
     glutTimerFunc(16, update, 0);
 
     glutMainLoop();
