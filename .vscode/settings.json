@@ -2,6 +2,7 @@
     "files.associations": {
         "constant.h": "c",
         "pipe.h": "c",
-        "time.h": "c"
+        "time.h": "c",
+        "signal.h": "c"
     }
 }
