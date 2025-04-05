@@ -1,27 +1,26 @@
 CC = gcc
 CFLAGS = -Wall -g
-LDFLAGS = -lGL -lGLU -lglut  # For graphics (if needed)
+LDFLAGS = -lGL -lGLU -lglut -lm
 
-# Referee program (main)
-REF_SRC = main.c config.c  pipe.c graphics.c
-REF_OBJ = $(REF_SRC:.c=.o)
-
-# Player program
-PLAYER_SRC = player.c config.c pipe.c
-PLAYER_OBJ = $(PLAYER_SRC:.c=.o)
-
-TARGETS = rope_game player
+# Separate executables
+TARGETS = rope_game player graphics
 
 all: $(TARGETS)
 
-rope_game: $(REF_OBJ)
-	$(CC) $(REF_OBJ) -o $@ $(LDFLAGS)  # Tab
+# Main game (no graphics code)
+rope_game: main.o config.o pipe.o
+	$(CC) $^ -o $@
 
-player: $(PLAYER_OBJ)
-	$(CC) $(PLAYER_OBJ) -o $@          # Tab
+# Graphics visualization
+graphics: graphics.o
+	$(CC) $^ -o $@ $(LDFLAGS)
 
-%.o: %.c constant.h config.h  pipe.h
-	$(CC) $(CFLAGS) -c $< -o $@       # Tab
+# Player process
+player: player.o config.o pipe.o
+	$(CC) $^ -o $@
+
+%.o: %.c constant.h config.h pipe.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o $(TARGETS)
