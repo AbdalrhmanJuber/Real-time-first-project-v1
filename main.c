@@ -10,14 +10,48 @@
 #include "config.h"
 #include "pipe.h"
 
+
+pid_t graphics_pid = -1;          // graphics child PID
+
 int effort_pipes[MAX_PLAYERS][2]; // child->parent
 int loc_pipes[MAX_PLAYERS][2];    // parent->child
+int range_energy[2]; // Store range energy values
 
 pid_t players[MAX_PLAYERS];       // 8 child PIDs
 GameConfig cfg;                   // config
 
 int team_scores[2] = {0,0};
 int consecutive_wins[2] = {0,0};
+
+
+
+void fork_graphics_process() {
+
+    graphics_pid = fork();
+
+    if (graphics_pid == 0) {
+
+        execl("./graphics", "./graphics", NULL);
+
+        perror("execl graphics failed");
+
+        exit(1);
+
+    } else if (graphics_pid > 0) {
+
+        printf("[PARENT] Spawned graphics process with PID %d\n", graphics_pid);
+
+    } else {
+
+        perror("fork failed for graphics process");
+
+        exit(1);
+
+    }
+
+}
+
+
 
 // spawn each child, passing 6 arguments
 void spawn_players() {
@@ -37,6 +71,7 @@ void spawn_players() {
         char buf_id[16], buf_team[16], buf_decay[16], buf_energy[16];
         char buf_write_effort[16], buf_read_loc[16];
         char buf_decay_min[16], buf_decay_max[16], buf_recover_min[16], buf_recover_max[16];
+        char buf_max_energy[16], buf_min_energy[16];
 
         sprintf(buf_id, "%d", player_id);
         sprintf(buf_team, "%d", team_id);
@@ -51,6 +86,8 @@ void spawn_players() {
         sprintf(buf_decay_max, "%d", cfg.decay_max);
         sprintf(buf_recover_min, "%d", cfg.fall_recover_min);
         sprintf(buf_recover_max, "%d", cfg.fall_recover_max);
+        sprintf(buf_max_energy, "%d", cfg.energy_max);
+        sprintf(buf_min_energy, "%d", cfg.energy_min);
 
 
         pid_t pid=fork();
@@ -60,12 +97,20 @@ void spawn_players() {
             close(effort_pipes[i][0]); // child not reading from effort pipe
             close(loc_pipes[i][1]);    // child not writing to loc pipe
 
-            execl("./player","./player",
-                  buf_id, buf_team, buf_decay, buf_energy,
-                  buf_write_effort, buf_read_loc,
-                    buf_decay_min, buf_decay_max,
-                    buf_recover_min, buf_recover_max,
-                  (char*)NULL);
+            execl("./player", "./player",
+                buf_id,          // argv[1]
+                buf_team,        // argv[2]
+                buf_decay,       // argv[3]
+                buf_energy,      // argv[4]
+                buf_write_effort,// argv[5]
+                buf_read_loc,    // argv[6]
+                buf_decay_min,   // argv[7]
+                buf_decay_max,   // argv[8]
+                buf_recover_min, // argv[9]
+                buf_recover_max, // argv[10]
+                buf_max_energy,  // argv[11]
+                buf_min_energy,  // argv[12]
+                (char*)NULL);
             perror("execl failed");
             exit(1);
         } else {
@@ -74,6 +119,8 @@ void spawn_players() {
             close(effort_pipes[i][1]); // parent won't write child's effort pipe
             close(loc_pipes[i][0]);    // parent won't read from child's loc pipe
         }
+        range_energy[0] = cfg.energy_min; // Save initial energy
+        range_energy[1] = cfg.energy_max;
     }
 }
 
@@ -149,6 +196,12 @@ void assign_locations() {
     }
 }
 
+void reset_players_energy() {
+    for (int i=0; i<MAX_PLAYERS; i++) {
+        kill(players[i], SIG_RESET_ENERGY);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     srand(time(NULL));
@@ -167,9 +220,10 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+     fork_graphics_process(); 
     // spawn children
     spawn_players();
-    usleep(10000); // let them start
+    usleep(10000); // let them 
     
     // Time tracking
     struct timeval start_time, current_time;
@@ -178,7 +232,6 @@ int main(int argc, char *argv[])
     // *** 1) parent-based location assignment before SIG_READY
     printf("=== Assigning locations ===\n");
     fflush(stdout);
-    assign_locations();
     usleep(10000); // let them start
     printf("=== Locations assigned ===\n");
     fflush(stdout);
@@ -190,7 +243,13 @@ int main(int argc, char *argv[])
     while (1) {
         total_rounds++;
         printf("\n===== START ROUND %d =====\n", total_rounds);
+        kill(graphics_pid, SIGUSR1); // ** //
 
+
+        reset_players_energy();
+        assign_locations();
+        
+        usleep(100000); // Let players process reset
         // *** 2) now that children have location, we can signal them "ready"
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_READY);
@@ -203,9 +262,10 @@ int main(int argc, char *argv[])
         }
         usleep(10000); // let them process the pull message
 
-        printf("=== Players are pulling ===\n");
+        printf("=== Players are pulling ===\n");     
         fflush(stdout);
 
+        kill(graphics_pid, SIGUSR2); // *** //
         // *** 4) read from each child's pipe and compute the sum of efforts
         // *** 5) check for winner
         int round_winner = -1;
@@ -261,12 +321,11 @@ int main(int argc, char *argv[])
         // Stop all players from pulling
         for (int i = 0; i < MAX_PLAYERS; i++) {
             kill(players[i], SIG_STOP);
-            printf("roro %d",i);
                 }
                 
         // Add a delay to ensure players exit the pulling loop
         usleep(100000); // 100ms delay
-        
+
         // scoring logic
         team_scores[round_winner]++;
         if (round_winner==last_winner) {

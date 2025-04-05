@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "constant.h": "c",
-        "pipe.h": "c",
-        "time.h": "c"
-    }
-}

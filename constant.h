@@ -4,28 +4,29 @@
 #define MAX_PLAYERS  8
 #define TEAM_SIZE    4
 
-#include <signal.h>
-
-// Additional signals
-#define SIG_ENERGY_REQ  SIGUSR1   // parent -> child: "report your raw energy"
-#define SIG_SET_LOC     SIGUSR2   // parent -> child: "here is your assigned location"
-#define SIG_READY       SIGRTMIN  // real-time signals can be used if you prefer
-#define SIG_PULL        (SIGRTMIN+1)
-#define SIG_TERMINATE   SIGTERM
+// Signal Assignments
+#define SIG_ENERGY_REQ  SIGUSR1       // Request energy report
+#define SIG_SET_LOC     SIGUSR2       // Assign location
+#define SIG_READY       SIGRTMIN      // Ready state (RT signal 0)
+#define SIG_PULL        (SIGRTMIN+1)  // Start pulling (RT signal 1)
+#define SIG_STOP        (SIGRTMIN+2)  // Stop pulling (RT signal 2)
+#define SIG_RESET_ENERGY (SIGRTMIN+3) // Reset energy (RT signal 3)
+#define SIG_TERMINATE   SIGTERM       // Terminate process
 
 #define TEAM1 0
 #define TEAM2 1
 
-// This is your existing data structure
+// Data structures (unchanged)
 typedef struct {
-    int id;          // 0..3
-    int team;        // TEAM1 or TEAM2
+    int id;
+    int team;
     int energy;
     int decay_rate;
     int is_fallen;
-    int location;    // 0..3
+    int location;
     int fall_time_left;
 } PlayerData;
+
 
 // Weighted effort -> already used
 typedef struct {
