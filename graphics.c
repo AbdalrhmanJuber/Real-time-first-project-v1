@@ -114,18 +114,7 @@ void drawEnergyText(float x, float y, float energy) {
     }
 }
 
-/**
- * Draw player ID text
- */
-void drawPlayerIdText(float x, float y, int playerId) {
-    char buffer[16];
-    snprintf(buffer, sizeof(buffer), "ID:%d", playerId);
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glRasterPos2f(x - 0.01f, y - 0.16f);  // Position below energy bar
-    for (int i = 0; buffer[i] != '\0'; i++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_10, buffer[i]);
-    }
-}
+
 
 /**
  * Draw energy bar under player
@@ -159,7 +148,7 @@ void drawEnergyBar(float x, float y, float energy) {
  * Draw player character with bobbing animation if round in progress
  */
 void drawPlayer(float baseX, float baseY, int flipped, float r, float g, float b, 
-                float energy, int index, int playerId) {
+                float energy, int index) {
     // Add bobbing if round is still active
     float offsetY = 0.0f;
     if (round_winner == 0) {
@@ -222,7 +211,6 @@ void drawPlayer(float baseX, float baseY, int flipped, float r, float g, float b
     // Draw energy bar and labels
     drawEnergyBar(x, y, energy);
     drawEnergyText(x, y, energy);
-    drawPlayerIdText(x, y, playerId);
 }
 
 /**
@@ -352,7 +340,7 @@ void display() {
         float baseX = -0.7f + i * 0.15f + currentOffset;
         float baseY = 0.05f;
         // flipped=1 => arms pointing right
-        drawPlayer(baseX, baseY, 1, 0.0f, 0.0f, 1.0f, team1[i], i, i);
+        drawPlayer(baseX, baseY, 1, 0.0f, 0.0f, 1.0f, team1[i], i);
     }
 
     // Draw red team
@@ -360,7 +348,7 @@ void display() {
         float baseX = 0.7f - i * 0.15f + currentOffset;
         float baseY = 0.05f;
         // flipped=-1 => arms pointing left
-        drawPlayer(baseX, baseY, -1, 1.0f, 0.0f, 0.0f, team2[i], i, i);
+        drawPlayer(baseX, baseY, -1, 1.0f, 0.0f, 0.0f, team2[i], i);
     }
 
     // Draw round number
