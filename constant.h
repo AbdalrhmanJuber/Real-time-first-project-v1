@@ -5,13 +5,13 @@
 #define TEAM_SIZE    4
 
 // Signal Assignments
-#define SIG_ENERGY_REQ  SIGUSR1       // Request energy report
-#define SIG_SET_LOC     SIGUSR2       // Assign location
-#define SIG_READY       SIGRTMIN      // Ready state (RT signal 0)
-#define SIG_PULL        (SIGRTMIN+1)  // Start pulling (RT signal 1)
-#define SIG_STOP        (SIGRTMIN+2)  // Stop pulling (RT signal 2)
+#define SIG_ENERGY_REQ   SIGUSR1      // Request energy report
+#define SIG_SET_LOC      SIGUSR2      // Assign location
+#define SIG_READY        SIGRTMIN     // Ready state (RT signal 0)
+#define SIG_PULL         (SIGRTMIN+1) // Start pulling (RT signal 1)
+#define SIG_STOP         (SIGRTMIN+2) // Stop pulling (RT signal 2)
 #define SIG_RESET_ENERGY (SIGRTMIN+3) // Reset energy (RT signal 3)
-#define SIG_TERMINATE   SIGTERM       // Terminate process
+#define SIG_TERMINATE    SIGTERM      // Terminate process
 
 #define TEAM1 0
 #define TEAM2 1
@@ -27,12 +27,12 @@ typedef struct {
     int fall_time_left;
 } PlayerData;
 
-
 // Weighted effort -> already used
 typedef struct {
     int player_id;
     int team;
     int weighted_effort;
+    int location;
 } EffortMessage;
 
 // Child -> Parent: raw energy
@@ -40,6 +40,7 @@ typedef struct {
     int player_id;
     int team;
     int energy; // raw
+    int location;
 } EnergyReply;
 
 // Parent -> Child: assigned location
@@ -48,7 +49,6 @@ typedef struct {
     int location;
 } LocationMessage;
 
-<<<<<<< HEAD
 // Parent -> Graphics: real-time game state updates
 typedef struct {
     int roundNumber;
@@ -59,6 +59,4 @@ typedef struct {
     int roundWinner; // 0 => none, 1 => Team1, 2 => Team2
 } GraphicsMessage;
 
-=======
->>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
 #endif
