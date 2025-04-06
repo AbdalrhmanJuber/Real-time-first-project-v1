@@ -11,8 +11,13 @@
 #include "config.h"
 #include "pipe.h"
 
+<<<<<<< HEAD
 static int graphics_pipe[2]; // parent->graphics pipe
 pid_t graphics_pid = -1;     // graphics child PID
+=======
+
+pid_t graphics_pid = -1;          // graphics child PID
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
 
 int effort_pipes[MAX_PLAYERS][2]; // child->parent
 int loc_pipes[MAX_PLAYERS][2];    // parent->child
@@ -24,6 +29,7 @@ GameConfig cfg;                   // config
 int team_scores[2] = {0,0};
 int consecutive_wins[2] = {0,0};
 
+<<<<<<< HEAD
 // Modified to use pipe communication
 void fork_graphics_process() {
     if (pipe(graphics_pipe) == -1) {
@@ -53,6 +59,38 @@ void fork_graphics_process() {
     }
 }
 
+=======
+
+
+void fork_graphics_process() {
+
+    graphics_pid = fork();
+
+    if (graphics_pid == 0) {
+
+        execl("./graphics", "./graphics", NULL);
+
+        perror("execl graphics failed");
+
+        exit(1);
+
+    } else if (graphics_pid > 0) {
+
+        printf("[PARENT] Spawned graphics process with PID %d\n", graphics_pid);
+
+    } else {
+
+        perror("fork failed for graphics process");
+
+        exit(1);
+
+    }
+
+}
+
+
+
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
 // spawn each child, passing 6 arguments
 void spawn_players() {
     for (int i=0; i<MAX_PLAYERS; i++){
@@ -220,8 +258,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+<<<<<<< HEAD
     fork_graphics_process(); // Now uses pipe communication
     
+=======
+     fork_graphics_process(); 
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
     // spawn children
     spawn_players();
     usleep(10000); // let them 
@@ -244,12 +286,21 @@ int main(int argc, char *argv[])
     while (1) {
         total_rounds++;
         printf("\n===== START ROUND %d =====\n", total_rounds);
+<<<<<<< HEAD
         
+=======
+        kill(graphics_pid, SIGUSR1); // ** //
+
+
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
         reset_players_energy();
         assign_locations();
         
         usleep(100000); // Let players process reset
+<<<<<<< HEAD
         
+=======
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
         // *** 2) now that children have location, we can signal them "ready"
         for (int i=0; i<MAX_PLAYERS; i++){
             kill(players[i], SIG_READY);
@@ -265,7 +316,12 @@ int main(int argc, char *argv[])
 
         printf("=== Players are pulling ===\n");     
         fflush(stdout);
+<<<<<<< HEAD
         
+=======
+
+        kill(graphics_pid, SIGUSR2); // *** //
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
         // *** 4) read from each child's pipe and compute the sum of efforts
         // *** 5) check for winner
         int round_winner = -1;
@@ -388,6 +444,14 @@ int main(int argc, char *argv[])
         for (int i = 0; i < MAX_PLAYERS; i++) {
             kill(players[i], SIG_STOP);
         }
+                
+        // Add a delay to ensure players exit the pulling loop
+        usleep(100000); // 100ms delay
+
+        // Stop all players from pulling
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            kill(players[i], SIG_STOP);
+                }
                 
         // Add a delay to ensure players exit the pulling loop
         usleep(100000); // 100ms delay

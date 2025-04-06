@@ -48,6 +48,7 @@ typedef struct {
     int location;
 } LocationMessage;
 
+<<<<<<< HEAD
 // Parent -> Graphics: real-time game state updates
 typedef struct {
     int roundNumber;
@@ -58,4 +59,6 @@ typedef struct {
     int roundWinner; // 0 => none, 1 => Team1, 2 => Team2
 } GraphicsMessage;
 
+=======
+>>>>>>> 2c6da580472c567665bd6f3ddb4522e302d6033c
 #endif
