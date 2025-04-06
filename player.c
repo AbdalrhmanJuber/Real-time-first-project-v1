@@ -23,7 +23,7 @@ static int decay_min = 1;                 // Min energy decay per second
 static int decay_max = 2;                 // Max energy decay per second
 static int recover_min = 1;               // Min recovery time when fallen
 static int recover_max = 2;               // Max recovery time when fallen
-static volatile sig_atomic_t pulling = 0; // Flag indicating if player is pulling
+static int pulling = 0; // Flag indicating if player is pulling
 static int initial_energy;                // Initial energy value
 
 /* Signal handlers prototypes */
@@ -76,8 +76,7 @@ void on_set_loc(int sig) {
  * Handle ready signal - game is about to begin
  */
 void on_ready(int sig) {
-    printf("[Player %d, Team %d] SIG_READY => location=%d, energy=%d\n",
-           me.id, me.team, me.location, me.energy);
+    printf("[Player %d, Team %d] SIG_READY \n",me.id, me.team);
 }
 
 /**

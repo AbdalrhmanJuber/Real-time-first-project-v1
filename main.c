@@ -156,13 +156,13 @@ void assign_locations() {
         if (got == sizeof(er)) {
             if (er.team == TEAM1) {
                 t1[c1].id = er.player_id; // 0..3
-                t1[c1].energy = er.energy;
+                t1[c1].energy = er.energy % 100;
                 printf("T1: %d %d\n", t1[c1].id, t1[c1].energy);
                 fflush(stdout);
                 c1++;
             } else {
                 t2[c2].id = er.player_id; // 0..3
-                t2[c2].energy = er.energy;
+                t2[c2].energy = er.energy % 100;
                 printf("T2: %d %d\n", t2[c2].id, t2[c2].energy);
                 fflush(stdout);
                 c2++;
@@ -262,6 +262,7 @@ int main(int argc, char *argv[])
 
     usleep(100000); // Let players process the location message
 
+
     // Main game loop - run rounds until end condition
     int total_rounds = 0;
     int last_winner = -1;
@@ -279,7 +280,7 @@ int main(int argc, char *argv[])
         for (int i = 0; i < MAX_PLAYERS; i++) {
             kill(players[i], SIG_READY);
         }
-        usleep(2000000); // Let them process the ready message
+        usleep(1000000); // Let them process the ready message
         printf("=== Players are ready ===\n");
         
         // Signal players to start pulling
@@ -335,11 +336,13 @@ int main(int argc, char *argv[])
                         t1[c1].id = er.player_id;
                         t1[c1].energy = er.energy;
                         t1[c1].location = er.location;
+                        
                         c1++;
                     } else {
                         t2[c2].id = er.player_id;
                         t2[c2].energy = er.energy;
                         t2[c2].location = er.location;
+                        
                         c2++;
                     }
                 }
